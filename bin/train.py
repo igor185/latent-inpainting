@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 import traceback
-
+sys.path.append("./sd")
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
