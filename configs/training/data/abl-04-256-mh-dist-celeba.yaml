@@ -6,6 +6,7 @@ num_workers: 3
 
 train:
   indir: ${location.data_root_dir}/train_256
+  kind: zero
   out_size: 256
   mask_gen_kwargs:  # probabilities do not need to sum to 1, they are re-normalized in mask generator
     irregular_proba: 1

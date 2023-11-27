@@ -172,15 +172,16 @@ class InpaintingEvaluatorOnline(nn.Module):
         """
         result = {}
         with torch.no_grad():
-            image_batch, mask_batch, inpainted_batch = batch[self.image_key], batch['mask'], batch[self.inpainted_key]
-            if self.clamp_image_range is not None:
-                image_batch = torch.clamp(image_batch,
-                                          min=self.clamp_image_range[0],
-                                          max=self.clamp_image_range[1])
-            self.groups.extend(self._get_bins(mask_batch))
+            image_batch, mask_batch, inpainted_batch = batch[self.image_key], batch['mask'], batch["predicted_image"]
+            # if self.clamp_image_range is not None:
+            #     image_batch = torch.clamp(image_batch,
+            #                               min=self.clamp_image_range[0],
+            #                               max=self.clamp_image_range[1])
+            # self.groups.extend(self._get_bins(mask_batch))
 
-            for score_name, score in self.scores.items():
-                result[score_name] = score(inpainted_batch, image_batch, mask_batch)
+        # result[score_name] = score(inpainted_batch, image_batch, mask_batch)
+        result["l2"] = torch.mean((inpainted_batch - image_batch) ** 2)
+        result["l1"] = torch.mean(torch.abs(inpainted_batch - image_batch))
         return result
 
     def process_batch(self, batch: Dict[str, torch.Tensor]):

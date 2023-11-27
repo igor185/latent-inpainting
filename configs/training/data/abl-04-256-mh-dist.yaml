@@ -1,11 +1,12 @@
 # @package _group_
 
-batch_size: 4
-val_batch_size: 2
+batch_size: 20
+val_batch_size: 40
 num_workers: 0
 
 train:
-  indir: ${location.data_root_dir}/train
+  indir: /mnt/data/datasets/places_standard_dataset/train
+  mask_generator_kind: zero
   out_size: 256
   mask_gen_kwargs:  # probabilities do not need to sum to 1, they are re-normalized in mask generator
     irregular_proba: 1
@@ -33,7 +34,7 @@ train:
     num_workers: ${data.num_workers}
 
 val:
-  indir: ${location.data_root_dir}/val
+  indir: /mnt/data/datasets/places_standard_dataset/val
   img_suffix: .png
   dataloader_kwargs:
     batch_size: ${data.val_batch_size}
@@ -99,7 +100,7 @@ val:
 #      num_workers: ${data.num_workers}
 
 visual_test:
-  indir: ${location.data_root_dir}/visual_test
+  indir: /mnt/data/datasets/places_standard_dataset/visual_test
   img_suffix: .png
   pad_out_to_modulo: 32
   dataloader_kwargs:

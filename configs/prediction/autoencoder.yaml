@@ -2,7 +2,7 @@ indir: /home/engineer/Dev/igor/thesis/own/data  # to be overriden in CLI
 outdir: /home/engineer/Dev/igor/thesis/own/output  # to be overriden in CLI
 
 model:
-  path: /home/engineer/Dev/igor/lama/LaMa_models/big-lama  # to be overriden in CLI
+  path: /home/engineer/Dev/igor/lama/LaMa_models/lama-places/lama-fourier  # to be overriden in CLI
 #  path: /home/engineer/Dev/igor/lama/LaMa_models/lama-places/lama-fourier  # to be overriden in CLI
   checkpoint: best.ckpt
 

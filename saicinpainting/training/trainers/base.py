@@ -117,8 +117,8 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
     def configure_optimizers(self):
         discriminator_params = list(self.discriminator.parameters())
         return [
-            dict(optimizer=make_optimizer(self.generator.parameters(), **self.config.optimizers.generator)),
-            dict(optimizer=make_optimizer(discriminator_params, **self.config.optimizers.discriminator)),
+            dict(optimizer=make_optimizer(self.generator.parameters(), **self.config.optimizers.generator))
+            # dict(optimizer=make_optimizer(discriminator_params, **self.config.optimizers.discriminator)),
         ]
 
     def train_dataloader(self):
@@ -186,27 +186,27 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         pd.set_option('display.width', 1000)
 
         # standard validation
-        val_evaluator_states = [s['val_evaluator_state'] for s in outputs if 'val_evaluator_state' in s]
-        val_evaluator_res = self.val_evaluator.evaluation_end(states=val_evaluator_states)
-        val_evaluator_res_df = pd.DataFrame(val_evaluator_res).stack(1).unstack(0)
-        val_evaluator_res_df.dropna(axis=1, how='all', inplace=True)
-        LOGGER.info(f'Validation metrics after epoch #{self.current_epoch}, '
-                    f'total {self.global_step} iterations:\n{val_evaluator_res_df}')
+        # val_evaluator_states = [s['val_evaluator_state'] for s in outputs if 'val_evaluator_state' in s]
+        # val_evaluator_res = self.val_evaluator.evaluation_end(states=val_evaluator_states)
+        # val_evaluator_res_df = pd.DataFrame(val_evaluator_res).stack(1).unstack(0)
+        # val_evaluator_res_df.dropna(axis=1, how='all', inplace=True)
+        # LOGGER.info(f'Validation metrics after epoch #{self.current_epoch}, '
+        #             f'total {self.global_step} iterations:\n{val_evaluator_res_df}')
 
-        for k, v in flatten_dict(val_evaluator_res).items():
-            self.log(f'val_{k}', v)
+        # for k, v in flatten_dict(val_evaluator_res).items():
+        #     self.log(f'val_{k}', v)
 
         # standard visual test
-        test_evaluator_states = [s['test_evaluator_state'] for s in outputs
-                                 if 'test_evaluator_state' in s]
-        test_evaluator_res = self.test_evaluator.evaluation_end(states=test_evaluator_states)
-        test_evaluator_res_df = pd.DataFrame(test_evaluator_res).stack(1).unstack(0)
-        test_evaluator_res_df.dropna(axis=1, how='all', inplace=True)
-        LOGGER.info(f'Test metrics after epoch #{self.current_epoch}, '
-                    f'total {self.global_step} iterations:\n{test_evaluator_res_df}')
-
-        for k, v in flatten_dict(test_evaluator_res).items():
-            self.log(f'test_{k}', v)
+        # test_evaluator_states = [s['test_evaluator_state'] for s in outputs
+        #                          if 'test_evaluator_state' in s]
+        # test_evaluator_res = self.test_evaluator.evaluation_end(states=test_evaluator_states)
+        # test_evaluator_res_df = pd.DataFrame(test_evaluator_res).stack(1).unstack(0)
+        # test_evaluator_res_df.dropna(axis=1, how='all', inplace=True)
+        # LOGGER.info(f'Test metrics after epoch #{self.current_epoch}, '
+        #             f'total {self.global_step} iterations:\n{test_evaluator_res_df}')
+        #
+        # for k, v in flatten_dict(test_evaluator_res).items():
+        #     self.log(f'test_{k}', v)
 
         # extra validations
         if self.extra_evaluators:

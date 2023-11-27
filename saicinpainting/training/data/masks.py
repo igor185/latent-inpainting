@@ -327,6 +327,8 @@ def get_mask_generator(kind, kwargs):
         cl = OutpaintingMaskGenerator
     elif kind == "dumb":
         cl = DumbAreaMaskGenerator
+    elif kind == "zero":
+        cl = lambda **kwargs: lambda *args, **kwargs: np.zeros((1, *args[0].shape[1:]), dtype=np.float32)
     else:
         raise NotImplementedError(f"No such generator kind = {kind}")
     return cl(**kwargs)

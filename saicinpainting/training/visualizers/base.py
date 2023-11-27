@@ -26,6 +26,8 @@ def visualize_mask_and_images(images_dict: Dict[str, np.ndarray], keys: List[str
     mask = images_dict['mask'] > 0.5
     result = []
     for i, k in enumerate(keys):
+        if k not in images_dict:
+            continue
         img = images_dict[k]
         img = np.transpose(img, (1, 2, 0))
 

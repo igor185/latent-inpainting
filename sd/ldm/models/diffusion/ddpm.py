@@ -758,7 +758,7 @@ class LatentDiffusion(DDPM):
 
         # else:
         #     if isinstance(self.first_stage_model, VQModelInterface):
-        return self.first_stage_model.decode(z, force_not_quantize=predict_cids or force_not_quantize) # False
+        return self.first_stage_model.decode(z, force_not_quantize=True) # False
             # else:
             #     return self.first_stage_model.decode(z)
 

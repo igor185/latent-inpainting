@@ -10,7 +10,8 @@ sys.path.append("sd")
 from sd.scripts.inpaint import make_batch
 from sd.ldm.util import instantiate_from_config
 
-input_dir = "/home/engineer/Dev/igor/thesis/sd/data/inpainting_examples"
+# input_dir = "/home/engineer/Dev/igor/thesis/sd/data/inpainting_examples"
+input_dir = "/home/engineer/Dev/igor/thesis/own/data"
 
 class SDWrapper:
     def __init__(self):
@@ -22,6 +23,13 @@ class SDWrapper:
     def encoder_features(self, inp):
         co, c = self.model.cond_stage_model.encode(inp, return_intermediate=True)
         return co, c
+
+    def encoder_inner_features(self, co):
+        c = self.model.cond_stage_model.encoder.conv_out(co)
+        c = self.model.cond_stage_model.quant_conv(c)
+        return self.decoder_features(c)
+
+
     def encoder_image(self, inp):
         c = self.model.cond_stage_model.encode(inp, return_intermediate=False)
         return c
@@ -41,6 +49,7 @@ def get_dataset():
     images = [x.replace("_mask.png", ".png") for x in masks]
     print(f"Found {len(masks)} inputs.")
     return images, masks
+
 def main():
 
     model = SDWrapper()

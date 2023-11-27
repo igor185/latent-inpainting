@@ -24,7 +24,14 @@ LOGGER = logging.getLogger(__name__)
 
 class InpaintingTrainDataset(Dataset):
     def __init__(self, indir, mask_generator, transform):
-        self.in_files = list(glob.glob(os.path.join(indir, '**', '*.jpg'), recursive=True))
+        pre_saved = os.path.join(indir, 'pre_saved.txt')
+        if os.path.exists(pre_saved):
+            with open(pre_saved, 'r') as f:
+                self.in_files = [line.strip() for line in f.readlines()]
+        else:
+            self.in_files = list(glob.glob(os.path.join(indir, '**', '*.jpg'), recursive=True))
+            with open(pre_saved, 'w') as f:
+                f.writelines([f'{line}\n' for line in self.in_files])
         self.mask_generator = mask_generator
         self.transform = transform
         self.iter_i = 0
@@ -43,6 +50,28 @@ class InpaintingTrainDataset(Dataset):
         self.iter_i += 1
         return dict(image=img,
                     mask=mask)
+
+# class AutoencoderDataset(Dataset):
+#     def __init__(self, indir, mask_generator, transform):
+#         self.in_files = list(glob.glob(os.path.join(indir, '**', '*.jpg'), recursive=True))
+#         self.mask_generator = mask_generator
+#         self.transform = transform
+#         self.iter_i = 0
+#
+#     def __len__(self):
+#         return len(self.in_files)
+#
+#     def __getitem__(self, item):
+#         path = self.in_files[item]
+#         img = cv2.imread(path)
+#         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+#         img = self.transform(image=img)['image']
+#         img = np.transpose(img, (2, 0, 1))
+#         # TODO: maybe generate mask before augmentations? slower, but better for segmentation-based masks
+#         mask = self.mask_generator(img, iter_i=self.iter_i)
+#         self.iter_i += 1
+#         return dict(image=img,
+#                     mask=mask)
 
 
 class InpaintingTrainWebDataset(IterableDataset):
@@ -226,6 +255,11 @@ def make_default_train_dataloader(indir, kind='default', out_size=512, mask_gen_
                                          transform=transform,
                                          out_size=out_size,
                                          **kwargs)
+    # elif kind == "autoencoder":
+    #     dataset = AutoencoderDataset(indir=indir,
+    #                                      mask_generator=mask_generator,
+    #                                      transform=transform,
+    #                                      **kwargs)
     else:
         raise ValueError(f'Unknown train dataset kind {kind}')
 
@@ -253,7 +287,7 @@ def make_default_val_dataset(indir, kind='default', out_size=512, transform_vari
         ])
 
     LOGGER.info(f'Make val dataloader {kind} from {indir}')
-    mask_generator = get_mask_generator(kind=kwargs.get("mask_generator_kind"), kwargs=kwargs.get("mask_gen_kwargs"))
+    mask_generator = get_mask_generator(kind=kwargs.get("mask_generator_kind", "zero"), kwargs=kwargs.get("mask_gen_kwargs"))
 
     if transform_variant is not None:
         transform = get_transforms(transform_variant, out_size)

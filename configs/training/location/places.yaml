@@ -1,0 +1,3 @@
+data_root_dir: /mnt/data/datasets/places_standard_dataset
+out_root_dir: /mnt/code/logs/lama/experiments
+tb_dir: /mnt/code/logs/lama/tb_logs

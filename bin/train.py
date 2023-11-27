@@ -5,6 +5,7 @@ import os
 import sys
 import traceback
 sys.path.append("./sd")
+sys.path.append(".")
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
@@ -26,7 +27,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 @handle_ddp_subprocess()
-@hydra.main(config_path='../configs/training', config_name='tiny_test.yaml')
+@hydra.main(config_path='../configs/training', config_name='lama-autoencoder.yaml')
 def main(config: OmegaConf):
     try:
         need_set_deterministic = handle_deterministic_config(config)
