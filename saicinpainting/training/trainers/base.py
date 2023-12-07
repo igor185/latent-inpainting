@@ -65,6 +65,14 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         self.config = config
 
         self.generator = make_generator(config, **self.config.generator)
+        if self.config.generator.get('mask_encoder', None) is not None:
+            type = self.config.generator.get('mask_encoder', "init")
+            if type == "init":
+                self.mask_encoder = nn.Sequential(
+                    nn.Conv2d(1, 16, 3, stride=2, padding=1),
+                    nn.Conv2d(16, 32, 3, stride=2, padding=1),
+                    nn.Conv2d(32, 64, 3, stride=2, padding=1),
+                )
         self.use_ddp = use_ddp
 
         if not get_has_ddp_rank():
@@ -133,10 +141,10 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
     def val_dataloader(self):
         res = [make_default_val_dataloader(**self.config.data.val)]
 
-        if self.config.data.visual_test is not None:
-            res = res + [make_default_val_dataloader(**self.config.data.visual_test)]
-        else:
-            res = res + res
+        # if self.config.data.visual_test is not None:
+        #     res = res + [make_default_val_dataloader(**self.config.data.visual_test)]
+        # else:
+        #     res = res + res
 
         extra_val = self.config.data.get('extra_val', ())
         if extra_val:
@@ -148,7 +156,7 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         self._is_training_step = True
         return self._do_step(batch, batch_idx, mode='train', optimizer_idx=optimizer_idx)
 
-    def validation_step(self, batch, batch_idx, dataloader_idx):
+    def validation_step(self, batch, batch_idx, dataloader_idx=0):
         extra_val_key = None
         if dataloader_idx == 0:
             mode = 'val'
@@ -178,8 +186,8 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         return full_loss
 
     def validation_epoch_end(self, outputs):
-        outputs = [step_out for out_group in outputs for step_out in out_group]
-        averaged_logs = average_dicts(step_out['log_info'] for step_out in outputs)
+        o=[out_group for out_group in outputs for step_out in out_group]
+        averaged_logs = average_dicts(step_out['log_info'] for step_out in o)
         self.log_dict({k: v.mean() for k, v in averaged_logs.items()})
 
         pd.set_option('display.max_columns', 500)

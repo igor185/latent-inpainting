@@ -3,6 +3,7 @@ import torch
 
 from saicinpainting.training.trainers.autoencoder import AutoencoderTrainingModule
 from saicinpainting.training.trainers.default import DefaultInpaintingTrainingModule
+from saicinpainting.training.trainers.latent import LatentTrainingModule
 
 
 def get_training_model_class(kind):
@@ -10,6 +11,8 @@ def get_training_model_class(kind):
         return DefaultInpaintingTrainingModule
     elif kind == 'autoencoder':
         return AutoencoderTrainingModule
+    elif kind == 'latent':
+        return LatentTrainingModule
 
     raise ValueError(f'Unknown trainer module {kind}')
 

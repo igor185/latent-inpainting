@@ -1,0 +1,35 @@
+run_title: ''
+
+training_model:
+  kind: latent
+  visualize_each_iters: 10 # TODO 1000
+  concat_mask: false
+  store_discr_outputs_for_vis: false
+losses: # l1 not in mask 10, feature_matching 100, resnet_pl? 30
+  l1:
+    weight_missing: 0 # not used for latent trainer
+    weight_known: 10
+  perceptual:
+    weight: 0
+  adversarial:
+    kind: r1
+    weight: 10
+    gp_coef: 0.001
+    mask_as_fake_target: true
+    allow_scale_mask: true
+  feature_matching:
+    weight: 0 # 100 take features from discriminator
+  resnet_pl:
+    weight: 0 # 30 uses output image
+    weights_path: ${env:TORCH_HOME}
+
+defaults:
+  - location: places
+  - data: abl-04-256-mh-dist
+  - generator: ffc_resnet_075_auto
+  - discriminator: pix2pixhd_nlayer
+  - optimizers: default_optimizers
+  - visualizer: directory
+  - evaluator: default_inpainted
+  - trainer: any_gpu_large_ssim_ddp_final
+  - hydra: overrides

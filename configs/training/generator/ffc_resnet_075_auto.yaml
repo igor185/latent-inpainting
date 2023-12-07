@@ -6,6 +6,7 @@ ngf: 8
 n_downsampling: 3
 n_blocks: 9
 add_out_act: sigmoid
+mask_encoder: init
 
 init_conv_kwargs:
   ratio_gin: 0

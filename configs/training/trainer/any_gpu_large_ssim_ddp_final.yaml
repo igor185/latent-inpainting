@@ -7,7 +7,7 @@ kwargs:
   log_gpu_memory: None  # set to min_max or all for debug
   limit_train_batches: 10000
 #  limit_val_batches: 10000
-  val_check_interval: 50
+  val_check_interval: 500
 #  fast_dev_run: True  # uncomment for faster debug
 #  track_grad_norm: 2  # uncomment to track L2 gradients norm
   log_every_n_steps: 250
@@ -28,5 +28,5 @@ checkpoint_kwargs:
   save_top_k: 5
   save_last: True
   period: 1
-  monitor: val_gen_l1
+  monitor: val_gen_l2
   mode: min
