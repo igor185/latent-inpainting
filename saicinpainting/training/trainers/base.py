@@ -47,15 +47,31 @@ def make_multiscale_noise(base_tensor, scales=6, scale_mode='bilinear'):
     align_corners = False if scale_mode in ('bilinear', 'bicubic') else None
     for _ in range(scales):
         cur_sample = torch.randn(batch_size, 1, cur_height, cur_width, device=base_tensor.device)
-        cur_sample_scaled = F.interpolate(cur_sample, size=(height, width), mode=scale_mode, align_corners=align_corners)
+        cur_sample_scaled = F.interpolate(cur_sample, size=(height, width), mode=scale_mode,
+                                          align_corners=align_corners)
         result.append(cur_sample_scaled)
         cur_height //= 2
         cur_width //= 2
     return torch.cat(result, dim=1)
 
 
+class LayerNorm2d(nn.Module):
+    def __init__(self, num_channels: int, eps: float = 1e-6) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(num_channels))
+        self.bias = nn.Parameter(torch.zeros(num_channels))
+        self.eps = eps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        u = x.mean(1, keepdim=True)
+        s = (x - u).pow(2).mean(1, keepdim=True)
+        x = (x - u) / torch.sqrt(s + self.eps)
+        x = self.weight[:, None, None] * x + self.bias[:, None, None]
+        return x
+
+
 class BaseInpaintingTrainingModule(ptl.LightningModule):
-    def __init__(self, config, use_ddp, *args,  predict_only=False, visualize_each_iters=100,
+    def __init__(self, config, use_ddp, *args, predict_only=False, visualize_each_iters=100,
                  average_generator=False, generator_avg_beta=0.999, average_generator_start_step=30000,
                  average_generator_period=10, store_discr_outputs_for_vis=False,
                  **kwargs):
@@ -73,7 +89,25 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                     nn.Conv2d(16, 32, 3, stride=2, padding=1),
                     nn.Conv2d(32, 64, 3, stride=2, padding=1),
                 )
+            elif type == "sam":
+                self.mask_encoder = nn.Sequential(
+                    nn.Conv2d(1, 4, kernel_size=3, stride=2, padding=1),
+                    LayerNorm2d(4),
+                    nn.GELU(),
+                    nn.Conv2d(4, 16, kernel_size=3, stride=2, padding=1),
+                    LayerNorm2d(16),
+                    nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),
+                    LayerNorm2d(32),
+                    nn.GELU(),
+                    nn.Conv2d(32, 64, kernel_size=1),
+                )
         self.use_ddp = use_ddp
+
+        self.conv1 = nn.Conv2d(64, 64, 1)
+        self.conv2 = nn.Conv2d(64, 64, 1)
+        self.conv3 = nn.Conv2d(64, 64, 1)
+        self.conv4 = nn.Conv2d(128, 64, 1)
+        self.conv5 = nn.Conv2d(64, 64, 1)
 
         if not get_has_ddp_rank():
             LOGGER.info(f'Generator\n{self.generator}')
@@ -110,7 +144,7 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
 
             if self.config.losses.get("mse", {"weight": 0})['weight'] > 0:
                 self.loss_mse = nn.MSELoss(reduction='none')
-            
+
             if self.config.losses.perceptual.weight > 0:
                 self.loss_pl = PerceptualLoss()
 
@@ -186,7 +220,7 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         return full_loss
 
     def validation_epoch_end(self, outputs):
-        o=[out_group for out_group in outputs for step_out in out_group]
+        o = [out_group for out_group in outputs for step_out in out_group]
         averaged_logs = average_dicts(step_out['log_info'] for step_out in o)
         self.log_dict({k: v.mean() for k, v in averaged_logs.items()})
 
@@ -268,7 +302,8 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         elif mode == 'test':
             result['test_evaluator_state'] = self.test_evaluator.process_batch(batch)
         elif mode == 'extra_val':
-            result[f'extra_val_{extra_val_key}_evaluator_state'] = self.extra_evaluators[extra_val_key].process_batch(batch)
+            result[f'extra_val_{extra_val_key}_evaluator_state'] = self.extra_evaluators[extra_val_key].process_batch(
+                batch)
 
         return result
 

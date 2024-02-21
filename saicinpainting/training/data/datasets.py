@@ -12,7 +12,7 @@ import webdataset
 from omegaconf import open_dict, OmegaConf
 from skimage.feature import canny
 from skimage.transform import rescale, resize
-from torch.utils.data import Dataset, IterableDataset, DataLoader, DistributedSampler, ConcatDataset
+from torch.utils.data import Dataset, IterableDataset, DataLoader, DistributedSampler, ConcatDataset, Subset
 
 from saicinpainting.evaluation.data import InpaintingDataset as InpaintingEvaluationDataset, \
     OurInpaintingDataset as OurInpaintingEvaluationDataset, ceil_modulo, InpaintingEvalOnlineDataset
@@ -233,7 +233,7 @@ def get_transforms(transform_variant, out_size):
 
 
 def make_default_train_dataloader(indir, kind='default', out_size=512, mask_gen_kwargs=None, transform_variant='default',
-                                  mask_generator_kind="mixed", dataloader_kwargs=None, ddp_kwargs=None, **kwargs):
+                                  mask_generator_kind="mixed", dataloader_kwargs=None, ddp_kwargs=None, subset_size=None, **kwargs):
     LOGGER.info(f'Make train dataloader {kind} from {indir}. Using mask generator={mask_generator_kind}')
 
     mask_generator = get_mask_generator(kind=mask_generator_kind, kwargs=mask_gen_kwargs)
@@ -262,6 +262,9 @@ def make_default_train_dataloader(indir, kind='default', out_size=512, mask_gen_
     #                                      **kwargs)
     else:
         raise ValueError(f'Unknown train dataset kind {kind}')
+
+    if subset_size is not None:
+        dataset = create_subset(dataset, subset_size)
 
     if dataloader_kwargs is None:
         dataloader_kwargs = {}
@@ -336,3 +339,15 @@ def make_constant_area_crop_params(img_height, img_width, min_size=128, max_size
     start_y = random.randint(0, img_height - out_height)
     start_x = random.randint(0, img_width - out_width)
     return (start_y, start_x, out_height, out_width)
+
+
+def create_subset(dataset: Dataset, subset_size: float) -> Dataset:
+    dataset_length = len(dataset)
+
+    if subset_size < 1:
+        subset_size = int(subset_size * dataset_length)
+
+    indices = torch.randperm(dataset_length)[:subset_size]
+    dataset = Subset(dataset, indices)
+
+    return dataset

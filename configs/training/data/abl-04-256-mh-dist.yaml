@@ -25,6 +25,7 @@ train:
       min_times: 1
 
     segm_proba: 0
+  subset_size: 1000
 
   transform_variant: distortions
   dataloader_kwargs:

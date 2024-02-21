@@ -52,7 +52,7 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
         for params in self.generator.model[-13:].parameters():
             params.requires_grad = False
 
-        path = "/home/engineer/Dev/Igor/thesis/own/output_auto_lama_4(another_mask_encoder)/model.pth"
+        path = "/home/engineer/Dev/igor/thesis/own/output_auto_lama_4(another_mask_encoder)/model.pth"
         state = torch.load(path, map_location='cpu')
         state_dict = {i[16:] if i.startswith('generator.') else i: state[i] for i in state}
         self.generator.model.load_state_dict(state_dict, strict=True)
@@ -92,10 +92,19 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
         batch["ft_h_mask"] = (batch["h"][0] + batch["h_mask"][:, :batch["h"][0].shape[1]],
                               batch["h"][1] + batch["h_mask"][:, batch["h"][0].shape[1]:])
 
+        # # Merge using Roman's method
+        # img_feat = torch.cat(batch["h"], dim=1)
+        # mask_feat = batch["h_mask"]
+        #
+        # img_feat_skip = self.conv1(img_feat)
+        # merge = self.conv4(torch.cat([self.conv3(img_feat), mask_feat], dim=1))
+        # batch["ft_h_mask"] = img_feat_skip + self.conv5(self.conv2(img_feat_skip) + merge)
+        # batch["ft_h_mask"] = (batch["ft_h_mask"][:, :batch["h"][0].shape[1]], batch["ft_h_mask"][:, batch["h"][0].shape[1]:])
+
+
         batch['refined_h'] = lama_inner(batch["ft_h_mask"])
-        batch['refined_h'] = (
-        batch['refined_h'][0] + batch["h"][0] + batch["h_mask"][:, :batch['refined_h'][0].shape[1]],
-        batch['refined_h'][1] + batch["h"][1] + batch["h_mask"][:, batch['refined_h'][0].shape[1]:])
+        lamb = self.generator.lamb
+        batch['refined_h'] = (lamb*batch['refined_h'][0] + batch["h"][0], lamb*batch['refined_h'][1] + batch["h"][1])
 
         batch['predicted_image'] = decoder(batch["refined_h"])
 
@@ -133,8 +142,8 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
         l1_in_mask = masked_l1_loss(predicted_img, img, original_mask, 0, 1)
         l2_in_mask = masked_l2_loss(predicted_img, img, original_mask, 0, 1)
 
-        total_loss = l2_value + l2_in_mask
-        metrics = dict(gen_l2=l2_value, l1_in_mask=l1_in_mask, l2_in_mask=l2_in_mask)
+        total_loss = l2_value #+ l2_in_mask
+        metrics = dict(gen_l2=l2_value, l1_in_mask=l1_in_mask, l2_in_mask=l2_in_mask, lamb=self.generator.lamb)
 
         # vgg-based perceptual loss
         if self.config.losses.perceptual.weight > 0:
