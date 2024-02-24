@@ -11,6 +11,7 @@ import torchvision
 from torch.utils.data import DistributedSampler
 
 from models.taesd import TAESD
+from own.vae_inference import SDWrapper
 from saicinpainting.evaluation import make_evaluator
 from saicinpainting.training.data.datasets import make_default_train_dataloader, make_default_val_dataloader
 from saicinpainting.training.losses.adversarial import make_discrim_loss
@@ -83,8 +84,9 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
 
         self.config = config
 
-        # self.generator = make_generator(config, **self.config.generator)
-        self.autoencoder = TAESD()  # self.autoencoder.encoder(images), self.autoencoder.decoder(y_)
+        self.generator = make_generator(config, **self.config.generator)
+        # self.autoencoder = TAESD()  # self.autoencoder.encoder(images), self.autoencoder.decoder(y_)
+        # self.autoencoder = SDWrapper()
         if self.config.generator.get('mask_encoder', None) is not None:
             type = self.config.generator.get('mask_encoder', "init")
             if type == "init":
@@ -106,9 +108,9 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                     nn.Conv2d(32, 64, kernel_size=1),
                 )
             elif type == "normed":
-                self.mask_encoder = MaskEncoder(4)
-        self.re_embeder = ReEmbeder(4, hidden_dim=32, out_dim=8)
-        self.unet = UNet(8, 4)
+                self.mask_encoder = MaskEncoder(64)
+        self.re_embeder = ReEmbeder(64, hidden_dim=128, in_dim=64, out_dim=64)
+        self.unet = UNet(64, 64)
         self.use_ddp = use_ddp
 
         # self.conv1 = nn.Conv2d(64, 64, 1)
@@ -392,11 +394,11 @@ class MaskEncoder(nn.Module):
 
 
 class ReEmbeder(nn.Module):
-    def __init__(self, mask_dim, hidden_dim, out_dim=64):
+    def __init__(self, mask_dim, hidden_dim, in_dim=3, out_dim=64):
         super(ReEmbeder, self).__init__()
-        self.reembed_a = NormedConv(4, hidden_dim)
-        self.reembed_b = NormedConv(4, hidden_dim)
-        self.reembed_c = NormedConv(4, hidden_dim)
+        self.reembed_a = NormedConv(in_dim, hidden_dim)
+        self.reembed_b = NormedConv(in_dim, hidden_dim)
+        self.reembed_c = NormedConv(in_dim, hidden_dim)
 
         concat_dim = hidden_dim + hidden_dim
         concat_msk = hidden_dim + mask_dim

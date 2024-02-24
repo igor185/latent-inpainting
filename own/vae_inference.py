@@ -4,7 +4,7 @@ import sys
 import glob
 import os
 import tqdm
-
+from torch import nn
 
 sys.path.append("sd")
 from sd.scripts.inpaint import make_batch
@@ -13,12 +13,19 @@ from sd.ldm.util import instantiate_from_config
 # input_dir = "/home/engineer/Dev/igor/thesis/sd/data/inpainting_examples"
 input_dir = "/home/engineer/Dev/igor/thesis/own/data"
 
-class SDWrapper:
+class SDWrapper(nn.Module):
     def __init__(self):
+        super(SDWrapper, self).__init__()
         config = OmegaConf.load("/home/engineer/Dev/igor/thesis/sd/models/ldm/inpainting_big/config.yaml")
         self.model = instantiate_from_config(config.model)
         state_dict = torch.load("/home/engineer/Dev/igor/thesis/sd/models/ldm/inpainting_big/last.ckpt", map_location="cpu")["state_dict"]
         self.model.load_state_dict(state_dict, strict=False)
+
+    def encoder(self, image):
+        return self.model.cond_stage_model.encode(image, return_intermediate=False)
+
+    def decoder(self, features):
+        return self.model.decode_first_stage(features, False)
 
     def encoder_features(self, inp):
         co, c = self.model.cond_stage_model.encode(inp, return_intermediate=True)

@@ -46,16 +46,16 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
             self.fake_fakes_gen = FakeFakesGenerator(**(fake_fakes_generator_kwargs or {}))
 
         # freeze encoder and decoder
-        # for params in self.generator.model[:5].parameters():
-        #     params.requires_grad = False
-        #
-        # for params in self.generator.model[-13:].parameters():
-        #     params.requires_grad = False
+        for params in self.generator.model[:5].parameters():
+            params.requires_grad = False
 
-        # path = "/home/engineer/Dev/igor/thesis/own/output_auto_lama_4(another_mask_encoder)/model.pth"
-        # state = torch.load(path, map_location='cpu')
-        # state_dict = {i[16:] if i.startswith('generator.') else i: state[i] for i in state}
-        # self.generator.model.load_state_dict(state_dict, strict=True)
+        for params in self.generator.model[-13:].parameters():
+            params.requires_grad = False
+
+        path = "/home/engineer/Dev/igor/thesis/own/output_auto_lama_4(another_mask_encoder)/model.pth"
+        state = torch.load(path, map_location='cpu')
+        state_dict = {i[16:] if i.startswith('generator.') else i: state[i] for i in state}
+        self.generator.model.load_state_dict(state_dict, strict=True)
 
 
     def forward(self, batch):
@@ -70,9 +70,9 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
         # load auto-encoder
         img = batch['image']
         mask = batch['mask']
-        # encoder = self.generator.model[:5]
-        # lama_inner = self.generator.model[5:-13]
-        # decoder = self.generator.model[-13:]
+        encoder = lambda x: torch.cat(self.generator.model[:5](x), dim=1)
+        lama_inner = self.generator.model[5:-13]
+        decoder = lambda x: self.generator.model[-13:]((x[:, :46], x[:, 46:]))
         # mask_encoder = self.mask_encoder
 
         masked_img = img * (1 - mask)  # (1 - mask) * self.config.mask.fill_value
@@ -92,8 +92,8 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
         # batch["ft_h_mask"] = (batch["h"][0] + batch["h_mask"][:, :batch["h"][0].shape[1]],
         #                       batch["h"][1] + batch["h_mask"][:, batch["h"][0].shape[1]:])
 
-        batch["feat_gt"] = self.autoencoder.encoder(img)
-        batch["feat_masked"] = self.autoencoder.encoder(masked_img)
+        batch["feat_gt"] = encoder(img)
+        batch["feat_masked"] = encoder(masked_img)
 
         batch["mask_feat"] = self.mask_encoder(mask)
         batch["feat_merged"] = self.re_embeder(batch["feat_masked"], batch["mask_feat"])
@@ -101,11 +101,11 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
         batch["refined_feat"] = self.unet(batch["feat_merged"])
         batch["predicted_feat"] = batch["refined_feat"] + batch["feat_masked"]
 
-        batch['predicted_image'] = self.autoencoder.decoder(batch["predicted_feat"])
-        batch['gt_image'] = self.autoencoder.decoder(batch["feat_gt"])
+        batch['predicted_image'] = decoder(batch["predicted_feat"])
+        batch['gt_image'] = decoder(batch["feat_gt"])
 
-        batch["refined_feat_decoded"] = self.autoencoder.decoder(batch["refined_feat"])
-        batch["expected_refined_feat_decoded"] = self.autoencoder.decoder(batch["feat_gt"]-batch["feat_masked"])
+        batch["refined_feat_decoded"] = decoder(batch["refined_feat"])
+        batch["expected_refined_feat_decoded"] = decoder(batch["feat_gt"]-batch["feat_masked"])
 
         # # Merge using Roman's method
         # img_feat = torch.cat(batch["h"], dim=1)
