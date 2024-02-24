@@ -10,7 +10,7 @@ from saicinpainting.utils import check_and_warn_input_range
 class DirectoryVisualizer(BaseVisualizer):
     DEFAULT_KEY_ORDER = 'image predicted_image inpainted'.split(' ')
 
-    def __init__(self, outdir, key_order=DEFAULT_KEY_ORDER, max_items_in_batch=10,
+    def __init__(self, outdir, key_order=DEFAULT_KEY_ORDER, max_items_in_batch=4,
                  last_without_mask=True, rescale_keys=None):
         self.outdir = outdir
         os.makedirs(self.outdir, exist_ok=True)
@@ -33,4 +33,6 @@ class DirectoryVisualizer(BaseVisualizer):
         out_fname = os.path.join(curoutdir, f'batch{batch_i:07d}{rank_suffix}.jpg')
 
         vis_img = cv2.cvtColor(vis_img, cv2.COLOR_RGB2BGR)
-        cv2.imwrite(out_fname, vis_img)
+        # cv2.imwrite(out_fname, vis_img)
+
+        return vis_img

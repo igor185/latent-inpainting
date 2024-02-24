@@ -46,16 +46,16 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
             self.fake_fakes_gen = FakeFakesGenerator(**(fake_fakes_generator_kwargs or {}))
 
         # freeze encoder and decoder
-        for params in self.generator.model[:5].parameters():
-            params.requires_grad = False
+        # for params in self.generator.model[:5].parameters():
+        #     params.requires_grad = False
+        #
+        # for params in self.generator.model[-13:].parameters():
+        #     params.requires_grad = False
 
-        for params in self.generator.model[-13:].parameters():
-            params.requires_grad = False
-
-        path = "/home/engineer/Dev/igor/thesis/own/output_auto_lama_4(another_mask_encoder)/model.pth"
-        state = torch.load(path, map_location='cpu')
-        state_dict = {i[16:] if i.startswith('generator.') else i: state[i] for i in state}
-        self.generator.model.load_state_dict(state_dict, strict=True)
+        # path = "/home/engineer/Dev/igor/thesis/own/output_auto_lama_4(another_mask_encoder)/model.pth"
+        # state = torch.load(path, map_location='cpu')
+        # state_dict = {i[16:] if i.startswith('generator.') else i: state[i] for i in state}
+        # self.generator.model.load_state_dict(state_dict, strict=True)
 
 
     def forward(self, batch):
@@ -70,10 +70,10 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
         # load auto-encoder
         img = batch['image']
         mask = batch['mask']
-        encoder = self.generator.model[:5]
-        lama_inner = self.generator.model[5:-13]
-        decoder = self.generator.model[-13:]
-        mask_encoder = self.mask_encoder
+        # encoder = self.generator.model[:5]
+        # lama_inner = self.generator.model[5:-13]
+        # decoder = self.generator.model[-13:]
+        # mask_encoder = self.mask_encoder
 
         masked_img = img * (1 - mask)  # (1 - mask) * self.config.mask.fill_value
 
@@ -86,11 +86,26 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
         # if self.concat_mask:
         #     masked_img = torch.cat([masked_img, mask], dim=1)
 
-        batch["h_gt"] = encoder(img)
-        batch["h"] = encoder(masked_img)
-        batch["h_mask"] = mask_encoder(mask)
-        batch["ft_h_mask"] = (batch["h"][0] + batch["h_mask"][:, :batch["h"][0].shape[1]],
-                              batch["h"][1] + batch["h_mask"][:, batch["h"][0].shape[1]:])
+        # batch["h_gt"] = encoder(img)
+        # batch["h"] = encoder(masked_img)
+        # batch["h_mask"] = mask_encoder(mask)
+        # batch["ft_h_mask"] = (batch["h"][0] + batch["h_mask"][:, :batch["h"][0].shape[1]],
+        #                       batch["h"][1] + batch["h_mask"][:, batch["h"][0].shape[1]:])
+
+        batch["feat_gt"] = self.autoencoder.encoder(img)
+        batch["feat_masked"] = self.autoencoder.encoder(masked_img)
+
+        batch["mask_feat"] = self.mask_encoder(mask)
+        batch["feat_merged"] = self.re_embeder(batch["feat_masked"], batch["mask_feat"])
+
+        batch["refined_feat"] = self.unet(batch["feat_merged"])
+        batch["predicted_feat"] = batch["refined_feat"] + batch["feat_masked"]
+
+        batch['predicted_image'] = self.autoencoder.decoder(batch["predicted_feat"])
+        batch['gt_image'] = self.autoencoder.decoder(batch["feat_gt"])
+
+        batch["refined_feat_decoded"] = self.autoencoder.decoder(batch["refined_feat"])
+        batch["expected_refined_feat_decoded"] = self.autoencoder.decoder(batch["feat_gt"]-batch["feat_masked"])
 
         # # Merge using Roman's method
         # img_feat = torch.cat(batch["h"], dim=1)
@@ -102,11 +117,11 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
         # batch["ft_h_mask"] = (batch["ft_h_mask"][:, :batch["h"][0].shape[1]], batch["ft_h_mask"][:, batch["h"][0].shape[1]:])
 
 
-        batch['refined_h'] = lama_inner(batch["ft_h_mask"])
-        lamb = self.generator.lamb
-        batch['refined_h'] = (lamb*batch['refined_h'][0] + batch["h"][0], lamb*batch['refined_h'][1] + batch["h"][1])
+        # batch['refined_h'] = lama_inner(batch["ft_h_mask"])
+        # lamb = self.generator.lamb
+        # batch['refined_h'] = (lamb*batch['refined_h'][0] + batch["h"][0], lamb*batch['refined_h'][1] + batch["h"][1])
 
-        batch['predicted_image'] = decoder(batch["refined_h"])
+        # batch['predicted_image'] = decoder(batch["refined_h"])
 
         if self.fake_fakes_proba > 1e-3:
             if self.training and torch.rand(1).item() < self.fake_fakes_proba:
@@ -124,15 +139,14 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
         return batch
 
     def generator_loss(self, batch):
-        refined_h = batch['refined_h']
-        h_gt = batch['h_gt']
-        img = batch['image']
-        predicted_img = batch[self.image_to_discriminator]
+        predicted_feat = batch['predicted_feat']
+        feat_gt = batch['feat_gt']
+        img = batch['gt_image']
+        predicted_img = batch["predicted_image"]
         original_mask = batch['mask']
         supervised_mask = batch['mask_for_losses']
 
-        l2_value = torch.nn.functional.mse_loss(refined_h[0], h_gt[0]) + torch.nn.functional.mse_loss(refined_h[1],
-                                                                                                      h_gt[1])
+        l2_value = torch.nn.functional.mse_loss(predicted_feat, feat_gt)
 
         # L1
         # l1_value = masked_l1_loss(predicted_img, img, supervised_mask,
@@ -143,7 +157,7 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
         l2_in_mask = masked_l2_loss(predicted_img, img, original_mask, 0, 1)
 
         total_loss = l2_value #+ l2_in_mask
-        metrics = dict(gen_l2=l2_value, l1_in_mask=l1_in_mask, l2_in_mask=l2_in_mask, lamb=self.generator.lamb)
+        metrics = dict(gen_l2=l2_value, l1_in_mask=l1_in_mask, l2_in_mask=l2_in_mask) #lamb=self.generator.lamb)
 
         # vgg-based perceptual loss
         if self.config.losses.perceptual.weight > 0:
@@ -154,28 +168,28 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
 
         # discriminator
         # adversarial_loss calls backward by itself
-        mask_for_discr = supervised_mask if self.distance_weighted_mask_for_discr else original_mask
-        self.adversarial_loss.pre_generator_step(real_batch=img, fake_batch=predicted_img,
-                                                 generator=self.generator, discriminator=self.discriminator)
-        discr_real_pred, discr_real_features = self.discriminator(img)
-        discr_fake_pred, discr_fake_features = self.discriminator(predicted_img)
-        adv_gen_loss, adv_metrics = self.adversarial_loss.generator_loss(real_batch=img,
-                                                                         fake_batch=predicted_img,
-                                                                         discr_real_pred=discr_real_pred,
-                                                                         discr_fake_pred=discr_fake_pred,
-                                                                         mask=mask_for_discr)
-        total_loss = total_loss + adv_gen_loss
-        metrics['gen_adv'] = adv_gen_loss
-        metrics.update(add_prefix_to_keys(adv_metrics, 'adv_'))
+        # mask_for_discr = supervised_mask if self.distance_weighted_mask_for_discr else original_mask
+        # self.adversarial_loss.pre_generator_step(real_batch=img, fake_batch=predicted_img,
+        #                                          generator=self.generator, discriminator=self.discriminator)
+        # discr_real_pred, discr_real_features = self.discriminator(img)
+        # discr_fake_pred, discr_fake_features = self.discriminator(predicted_img)
+        # adv_gen_loss, adv_metrics = self.adversarial_loss.generator_loss(real_batch=img,
+        #                                                                  fake_batch=predicted_img,
+        #                                                                  discr_real_pred=discr_real_pred,
+        #                                                                  discr_fake_pred=discr_fake_pred,
+        #                                                                  mask=mask_for_discr)
+        # total_loss = total_loss + adv_gen_loss
+        # metrics['gen_adv'] = adv_gen_loss
+        # metrics.update(add_prefix_to_keys(adv_metrics, 'adv_'))
 
         # feature matching
-        if self.config.losses.feature_matching.weight > 0:
-            need_mask_in_fm = OmegaConf.to_container(self.config.losses.feature_matching).get('pass_mask', False)
-            mask_for_fm = supervised_mask if need_mask_in_fm else None
-            fm_value = feature_matching_loss(discr_fake_features, discr_real_features,
-                                             mask=mask_for_fm) * self.config.losses.feature_matching.weight
-            total_loss = total_loss + fm_value
-            metrics['gen_fm'] = fm_value
+        # if self.config.losses.feature_matching.weight > 0:
+        #     need_mask_in_fm = OmegaConf.to_container(self.config.losses.feature_matching).get('pass_mask', False)
+        #     mask_for_fm = supervised_mask if need_mask_in_fm else None
+        #     fm_value = feature_matching_loss(discr_fake_features, discr_real_features,
+        #                                      mask=mask_for_fm) * self.config.losses.feature_matching.weight
+        #     total_loss = total_loss + fm_value
+        #     metrics['gen_fm'] = fm_value
 
         if self.loss_resnet_pl is not None:
             resnet_pl_value = self.loss_resnet_pl(predicted_img, img)

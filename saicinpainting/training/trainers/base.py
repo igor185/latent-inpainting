@@ -7,14 +7,17 @@ import pytorch_lightning as ptl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision
 from torch.utils.data import DistributedSampler
 
+from models.taesd import TAESD
 from saicinpainting.evaluation import make_evaluator
 from saicinpainting.training.data.datasets import make_default_train_dataloader, make_default_val_dataloader
 from saicinpainting.training.losses.adversarial import make_discrim_loss
 from saicinpainting.training.losses.perceptual import PerceptualLoss, ResNetPL
 from saicinpainting.training.modules import make_generator, make_discriminator
 from saicinpainting.training.visualizers import make_visualizer
+from saicinpainting.training.visualizers.base import visualize_mask_and_images_batch
 from saicinpainting.utils import add_prefix_to_keys, average_dicts, set_requires_grad, flatten_dict, \
     get_has_ddp_rank
 
@@ -80,7 +83,8 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
 
         self.config = config
 
-        self.generator = make_generator(config, **self.config.generator)
+        # self.generator = make_generator(config, **self.config.generator)
+        self.autoencoder = TAESD()  # self.autoencoder.encoder(images), self.autoencoder.decoder(y_)
         if self.config.generator.get('mask_encoder', None) is not None:
             type = self.config.generator.get('mask_encoder', "init")
             if type == "init":
@@ -101,16 +105,20 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                     nn.GELU(),
                     nn.Conv2d(32, 64, kernel_size=1),
                 )
+            elif type == "normed":
+                self.mask_encoder = MaskEncoder(4)
+        self.re_embeder = ReEmbeder(4, hidden_dim=32, out_dim=8)
+        self.unet = UNet(8, 4)
         self.use_ddp = use_ddp
 
-        self.conv1 = nn.Conv2d(64, 64, 1)
-        self.conv2 = nn.Conv2d(64, 64, 1)
-        self.conv3 = nn.Conv2d(64, 64, 1)
-        self.conv4 = nn.Conv2d(128, 64, 1)
-        self.conv5 = nn.Conv2d(64, 64, 1)
+        # self.conv1 = nn.Conv2d(64, 64, 1)
+        # self.conv2 = nn.Conv2d(64, 64, 1)
+        # self.conv3 = nn.Conv2d(64, 64, 1)
+        # self.conv4 = nn.Conv2d(128, 64, 1)
+        # self.conv5 = nn.Conv2d(64, 64, 1)
 
-        if not get_has_ddp_rank():
-            LOGGER.info(f'Generator\n{self.generator}')
+        # if not get_has_ddp_rank():
+        #     LOGGER.info(f'Generator\n{self.generator}')
 
         if not predict_only:
             self.save_hyperparameters(self.config)
@@ -159,7 +167,8 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
     def configure_optimizers(self):
         discriminator_params = list(self.discriminator.parameters())
         return [
-            dict(optimizer=make_optimizer(self.generator.parameters(), **self.config.optimizers.generator))
+            # *self.autoencoder.parameters()
+            dict(optimizer=make_optimizer([*self.mask_encoder.parameters(), *self.re_embeder.parameters(), *self.unet.parameters()], **self.config.optimizers.generator))
             # dict(optimizer=make_optimizer(discriminator_params, **self.config.optimizers.discriminator)),
         ]
 
@@ -291,8 +300,26 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
             vis_suffix = f'_{mode}'
             if mode == 'extra_val':
                 vis_suffix += f'_{extra_val_key}'
-            self.visualizer(self.current_epoch, batch_idx, batch, suffix=vis_suffix)
+            vis_img = self.visualizer(self.current_epoch, batch_idx, batch, suffix=vis_suffix)
 
+            # log image to the tensorboard
+            self.logger.experiment.add_image('sample_' + mode, vis_img.transpose([2, 0, 1])[[2, 1, 0], :, :],
+                                             global_step=self.current_epoch * len(self.train_dataloader()) + batch_idx)
+
+            feat = batch["refined_feat_decoded"]
+            exp_feat = batch["expected_refined_feat_decoded"]
+            img = torch.cat((exp_feat, feat), dim=2)[:6]
+            img = torchvision.utils.make_grid(img)
+
+            self.logger.experiment.add_image('sample_delta_' + mode, img, global_step=self.current_epoch * len(self.train_dataloader()) + batch_idx)
+
+        #     'predicted_image', 'gt_image'
+            feat = batch["predicted_image"]
+            exp_feat = batch["gt_image"]
+            img = torch.cat((exp_feat, feat), dim=2)[:6]
+            img = torchvision.utils.make_grid(img)
+
+            self.logger.experiment.add_image('raw_result_' + mode, img, global_step=self.current_epoch * len(self.train_dataloader()) + batch_idx)
         metrics_prefix = f'{mode}_'
         if mode == 'extra_val':
             metrics_prefix += f'{extra_val_key}_'
@@ -332,3 +359,140 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
 
     def get_ddp_rank(self):
         return self.trainer.global_rank if (self.trainer.num_nodes * self.trainer.num_processes) > 1 else None
+
+
+class NormedConv(nn.Module):
+    def __init__(self, in_dim, out_dim, kernel_size=3, stride=1, padding=1):
+        super(NormedConv, self).__init__()
+        self.conv = nn.Conv2d(in_dim, out_dim, kernel_size, stride, padding)
+        self.norm = nn.BatchNorm2d(out_dim)
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.norm(x)
+        x = self.relu(x)
+        return x
+
+
+class MaskEncoder(nn.Module):
+    def __init__(self, out_dim):
+        super(MaskEncoder, self).__init__()
+        self.conv1 = NormedConv(1, 4)
+        self.conv2 = NormedConv(4, 8, stride=2)
+        self.conv3 = NormedConv(8, 16, stride=2)
+        self.conv4 = NormedConv(16, out_dim, stride=2)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
+        return x
+
+
+class ReEmbeder(nn.Module):
+    def __init__(self, mask_dim, hidden_dim, out_dim=64):
+        super(ReEmbeder, self).__init__()
+        self.reembed_a = NormedConv(4, hidden_dim)
+        self.reembed_b = NormedConv(4, hidden_dim)
+        self.reembed_c = NormedConv(4, hidden_dim)
+
+        concat_dim = hidden_dim + hidden_dim
+        concat_msk = hidden_dim + mask_dim
+
+        self.fuse_1 = NormedConv(concat_msk, hidden_dim)
+        self.fuse_2 = NormedConv(concat_dim, hidden_dim)
+        self.fuse_3 = NormedConv(concat_dim, out_dim)
+
+    def forward(self, img_emb, msk_emb):
+        x_a = self.reembed_a(img_emb)
+        x_b = self.reembed_b(img_emb)
+        x_c = self.reembed_c(img_emb)
+
+        x = torch.cat([x_c, msk_emb], dim=1)
+        x = self.fuse_1(x)
+        x = torch.cat([x, x_b], dim=1)
+        x = self.fuse_2(x)
+        x = torch.cat([x, x_a], dim=1)
+        x = self.fuse_3(x)
+
+        return x
+
+
+class UNet(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(UNet, self).__init__()
+        factor = 1
+        # Encoder
+        self.enc1 = ResBlock(in_channels, 32, downsample=False)
+        self.enc2 = ResBlock(32, 64, downsample=True)
+        self.enc3 = ResBlock(64, 128, downsample=True)
+        self.enc4 = ResBlock(128, 256, downsample=True)
+
+        # Bottleneck
+        self.bottleneck = ResBlock(256, 256, downsample=True)
+
+        # Decoder
+        self.dec4 = ResBlock(512, 128, downsample=False)
+        self.dec3 = ResBlock(256, 64, downsample=False)
+        self.dec2 = ResBlock(128, 32, downsample=False)
+        self.dec1 = ResBlock(64, 32, downsample=False)
+
+        # Final Convolution
+        self.final_conv = nn.Conv2d(32, out_channels, kernel_size=1)
+
+    def forward(self, x):
+        # Encoder
+        enc1 = self.enc1(x)
+        enc2 = self.enc2(enc1)
+        enc3 = self.enc3(enc2)
+        enc4 = self.enc4(enc3)
+
+        # Bottleneck
+        z = self.bottleneck(enc4)
+
+        dec4 = self.upsample(z)
+        dec4 = torch.cat((dec4, enc4), dim=1)
+        dec4 = self.dec4(dec4)
+
+        dec3 = self.upsample(dec4)
+        dec3 = torch.cat((dec3, enc3), dim=1)
+        dec3 = self.dec3(dec3)
+
+        dec2 = self.upsample(dec3)
+        dec2 = torch.cat((dec2, enc2), dim=1)
+        dec2 = self.dec2(dec2)
+
+        dec1 = self.upsample(dec2)
+        dec1 = torch.cat((dec1, enc1), dim=1)
+        dec1 = self.dec1(dec1)
+
+        # Final Convolution
+        out = self.final_conv(dec1)
+        return out
+
+    def upsample(self, x):
+        return F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=True)
+
+class ResBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, downsample=False):
+        super(ResBlock, self).__init__()
+        if downsample:
+            self.conv1 = NormedConv(in_channels, out_channels, stride=2)
+            self.match_dimensions = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=2, padding=0)
+        else:
+            self.conv1 = NormedConv(in_channels, out_channels, stride=1)
+            self.match_dimensions = None if in_channels == out_channels else nn.Conv2d(in_channels, out_channels,
+                                                                                       kernel_size=1, stride=1,
+                                                                                       padding=0)
+
+        self.conv2 = NormedConv(out_channels, out_channels, stride=1)
+        self.downsample = downsample
+
+    def forward(self, x):
+        residual = x if self.match_dimensions is None else self.match_dimensions(x)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = x + residual
+        return F.relu(x, inplace=False)

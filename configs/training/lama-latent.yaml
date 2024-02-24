@@ -2,7 +2,7 @@ run_title: ''
 
 training_model:
   kind: latent
-  visualize_each_iters: 10 # TODO 1000
+  visualize_each_iters: 1000 # TODO 1000
   concat_mask: false
   store_discr_outputs_for_vis: false
 losses: # l1 not in mask 10, feature_matching 100, resnet_pl? 30

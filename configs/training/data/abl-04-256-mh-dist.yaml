@@ -1,12 +1,12 @@
 # @package _group_
 
-batch_size: 40
-val_batch_size: 80
+batch_size: 10
+val_batch_size: 40
 num_workers: 16
 
 train:
   indir: /mnt/data/datasets/places_standard_dataset/train
-  out_size: 256
+  out_size: 512
   mask_gen_kwargs:  # probabilities do not need to sum to 1, they are re-normalized in mask generator
     irregular_proba: 1
     irregular_kwargs:
@@ -25,7 +25,7 @@ train:
       min_times: 1
 
     segm_proba: 0
-  subset_size: 1000
+#  subset_size: 1000
 
   transform_variant: distortions
   dataloader_kwargs:

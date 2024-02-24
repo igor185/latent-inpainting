@@ -263,8 +263,8 @@ def make_default_train_dataloader(indir, kind='default', out_size=512, mask_gen_
     else:
         raise ValueError(f'Unknown train dataset kind {kind}')
 
-    if subset_size is not None:
-        dataset = create_subset(dataset, subset_size)
+    # if subset_size is not None:
+    #     dataset = create_subset(dataset, subset_size)
 
     if dataloader_kwargs is None:
         dataloader_kwargs = {}
