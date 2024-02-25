@@ -2,7 +2,7 @@
 
 batch_size: 25
 val_batch_size: 70
-num_workers: 16
+num_workers: 40
 
 train:
   indir: /mnt/data/datasets/places_standard_dataset/train

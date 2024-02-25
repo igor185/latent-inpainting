@@ -71,8 +71,8 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
         img = batch['image']
         mask = batch['mask']
         encoder = lambda x: torch.cat(self.generator.model[:5](x), dim=1)
-        lama_inner = self.generator.model[5:-13]
-        decoder = lambda x: self.generator.model[-13:]((x[:, :46], x[:, 46:]))
+        lama_inner = lambda x: torch.cat(self.generator.model[5:-13]((x[:, :16], x[:, 16:])), dim=1)
+        decoder = lambda x: self.generator.model[-13:]((x[:, :16], x[:, 16:]))
         # mask_encoder = self.mask_encoder
 
         masked_img = img * (1 - mask)  # (1 - mask) * self.config.mask.fill_value
@@ -98,7 +98,7 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
         batch["mask_feat"] = self.mask_encoder(mask)
         batch["feat_merged"] = self.re_embeder(batch["feat_masked"], batch["mask_feat"])
 
-        batch["refined_feat"] = self.unet(batch["feat_merged"])
+        batch["refined_feat"] = lama_inner(batch["feat_merged"])
         batch["predicted_feat"] = batch["refined_feat"] + batch["feat_masked"]
 
         batch['predicted_image'] = decoder(batch["predicted_feat"])

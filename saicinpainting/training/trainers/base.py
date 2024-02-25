@@ -110,7 +110,7 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
             elif type == "normed":
                 self.mask_encoder = MaskEncoder(64)
         self.re_embeder = ReEmbeder(64, hidden_dim=128, in_dim=64, out_dim=64)
-        self.unet = UNet(64, 64)
+        # self.unet = UNet(64, 64)
         self.use_ddp = use_ddp
 
         # self.conv1 = nn.Conv2d(64, 64, 1)
@@ -170,7 +170,7 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         discriminator_params = list(self.discriminator.parameters())
         return [
             # *self.autoencoder.parameters()
-            dict(optimizer=make_optimizer([*self.mask_encoder.parameters(), *self.re_embeder.parameters(), *self.unet.parameters()], **self.config.optimizers.generator))
+            dict(optimizer=make_optimizer([*self.mask_encoder.parameters(), *self.re_embeder.parameters(), *self.generator.parameters()], **self.config.optimizers.generator))
             # dict(optimizer=make_optimizer(discriminator_params, **self.config.optimizers.discriminator)),
         ]
 
