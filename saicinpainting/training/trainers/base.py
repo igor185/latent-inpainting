@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 from torch.utils.data import DistributedSampler
+import segmentation_models_pytorch as smp
 
 from models.taesd import TAESD
 from own.vae_inference import SDWrapper
@@ -111,6 +112,7 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                 self.mask_encoder = MaskEncoder(64)
         self.re_embeder = ReEmbeder(64, hidden_dim=128, in_dim=64, out_dim=64)
         # self.unet = UNet(64, 64)
+        self.unet = smp.Unet("resnet34", encoder_weights=None, in_channels=64, classes=64)
         self.use_ddp = use_ddp
 
         # self.conv1 = nn.Conv2d(64, 64, 1)
@@ -170,7 +172,11 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         discriminator_params = list(self.discriminator.parameters())
         return [
             # *self.autoencoder.parameters()
-            dict(optimizer=make_optimizer([*self.mask_encoder.parameters(), *self.re_embeder.parameters(), *self.generator.parameters()], **self.config.optimizers.generator))
+            dict(optimizer=make_optimizer([*self.mask_encoder.parameters(),
+                                           *self.unet.parameters(),
+                                           *self.re_embeder.parameters(),
+                                           *self.generator.parameters()],
+                                          **self.config.optimizers.generator))
             # dict(optimizer=make_optimizer(discriminator_params, **self.config.optimizers.discriminator)),
         ]
 

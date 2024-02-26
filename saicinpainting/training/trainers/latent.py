@@ -98,7 +98,7 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
         batch["mask_feat"] = self.mask_encoder(mask)
         batch["feat_merged"] = self.re_embeder(batch["feat_masked"], batch["mask_feat"])
 
-        batch["refined_feat"] = lama_inner(batch["feat_merged"])
+        batch["refined_feat"] = self.unet(batch["feat_merged"])
         batch["predicted_feat"] = batch["refined_feat"] + batch["feat_masked"]
 
         batch['predicted_image'] = decoder(batch["predicted_feat"])
