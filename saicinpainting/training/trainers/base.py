@@ -86,7 +86,7 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         self.config = config
 
         self.generator = make_generator(config, **self.config.generator)
-        # self.autoencoder = TAESD()  # self.autoencoder.encoder(images), self.autoencoder.decoder(y_)
+        self.autoencoder = TAESD()  # self.autoencoder.encoder(images), self.autoencoder.decoder(y_)
         # self.autoencoder = SDWrapper()
         if self.config.generator.get('mask_encoder', None) is not None:
             type = self.config.generator.get('mask_encoder', "init")
@@ -109,10 +109,10 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                     nn.Conv2d(32, 64, kernel_size=1),
                 )
             elif type == "normed":
-                self.mask_encoder = MaskEncoder(64)
-        self.re_embeder = ReEmbeder(64, hidden_dim=128, in_dim=64, out_dim=64)
+                self.mask_encoder = MaskEncoder(4)
+        self.re_embeder = ReEmbeder(4, hidden_dim=32, in_dim=4, out_dim=4)
         # self.unet = UNet(64, 64)
-        self.unet = smp.Unet("resnet34", encoder_weights=None, in_channels=64, classes=64)
+        self.unet = smp.Unet("resnet34", encoder_weights=None, in_channels=4, classes=4)
         self.use_ddp = use_ddp
 
         # self.conv1 = nn.Conv2d(64, 64, 1)
@@ -173,6 +173,7 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         return [
             # *self.autoencoder.parameters()
             dict(optimizer=make_optimizer([*self.mask_encoder.parameters(),
+                                           *self.autoencoder.parameters(),
                                            *self.unet.parameters(),
                                            *self.re_embeder.parameters(),
                                            *self.generator.parameters()],

@@ -70,9 +70,11 @@ class LatentTrainingModule(BaseInpaintingTrainingModule):
         # load auto-encoder
         img = batch['image']
         mask = batch['mask']
-        encoder = lambda x: torch.cat(self.generator.model[:5](x), dim=1)
+        # encoder = lambda x: torch.cat(self.generator.model[:5](x), dim=1)
+        encoder = lambda x: self.autoencoder.encoder(x)
         lama_inner = lambda x: torch.cat(self.generator.model[5:-13]((x[:, :16], x[:, 16:])), dim=1)
-        decoder = lambda x: self.generator.model[-13:]((x[:, :16], x[:, 16:]))
+        # decoder = lambda x: self.generator.model[-13:]((x[:, :16], x[:, 16:]))
+        decoder = lambda x: self.autoencoder.decoder(x)
         # mask_encoder = self.mask_encoder
 
         masked_img = img * (1 - mask)  # (1 - mask) * self.config.mask.fill_value
