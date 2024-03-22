@@ -27,7 +27,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 @handle_ddp_subprocess()
-@hydra.main(config_path='../configs/training', config_name='lama-regular.yaml')
+@hydra.main(config_path='../configs/training', config_name='lama-fourier.yaml')
 def main(config: OmegaConf):
     try:
         need_set_deterministic = handle_deterministic_config(config)

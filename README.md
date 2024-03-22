@@ -3,7 +3,7 @@
 by Roman Suvorov, Elizaveta Logacheva, Anton Mashikhin, 
 Anastasia Remizova, Arsenii Ashukha, Aleksei Silvestrov, Naejin Kong, Harshith Goka, Kiwoong Park, Victor Lempitsky.
 
-<p align="center" "font-size:30px;">
+<p>
   🔥🔥🔥
   <br>
   <b>

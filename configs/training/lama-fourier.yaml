@@ -26,7 +26,7 @@ losses:
 defaults:
   - location: places
   - data: abl-04-256-mh-dist
-  - generator: pix2pixhd_global_sigmoid
+  - generator: ffc_resnet_075
   - discriminator: pix2pixhd_nlayer
   - optimizers: default_optimizers
   - visualizer: directory
