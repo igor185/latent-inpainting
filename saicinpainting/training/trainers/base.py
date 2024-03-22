@@ -169,16 +169,22 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         LOGGER.info('BaseInpaintingTrainingModule init done')
 
     def configure_optimizers(self):
+        # discriminator_params = list(self.discriminator.parameters())
+        # return [
+        #     # *self.autoencoder.parameters()
+        #     dict(optimizer=make_optimizer([*self.mask_encoder.parameters(),
+        #                                    *self.autoencoder.parameters(),
+        #                                    *self.unet.parameters(),
+        #                                    *self.re_embeder.parameters(),
+        #                                    *self.generator.parameters()],
+        #                                   **self.config.optimizers.generator))
+        #     # dict(optimizer=make_optimizer(discriminator_params, **self.config.optimizers.discriminator)),
+        # ]
+
         discriminator_params = list(self.discriminator.parameters())
         return [
-            # *self.autoencoder.parameters()
-            dict(optimizer=make_optimizer([*self.mask_encoder.parameters(),
-                                           *self.autoencoder.parameters(),
-                                           *self.unet.parameters(),
-                                           *self.re_embeder.parameters(),
-                                           *self.generator.parameters()],
-                                          **self.config.optimizers.generator))
-            # dict(optimizer=make_optimizer(discriminator_params, **self.config.optimizers.discriminator)),
+            dict(optimizer=make_optimizer(self.generator.parameters(), **self.config.optimizers.generator)),
+            dict(optimizer=make_optimizer(discriminator_params, **self.config.optimizers.discriminator)),
         ]
 
     def train_dataloader(self):
@@ -315,16 +321,16 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
             self.logger.experiment.add_image('sample_' + mode, vis_img.transpose([2, 0, 1])[[2, 1, 0], :, :],
                                              global_step=self.current_epoch * len(self.train_dataloader()) + batch_idx)
 
-            feat = batch["refined_feat_decoded"]
-            exp_feat = batch["expected_refined_feat_decoded"]
-            img = torch.cat((exp_feat, feat), dim=2)[:6]
-            img = torchvision.utils.make_grid(img)
+            # feat = batch["refined_feat_decoded"]
+            # exp_feat = batch["expected_refined_feat_decoded"]
+            # img = torch.cat((exp_feat, feat), dim=2)[:6]
+            # img = torchvision.utils.make_grid(img)
 
-            self.logger.experiment.add_image('sample_delta_' + mode, img, global_step=self.current_epoch * len(self.train_dataloader()) + batch_idx)
+            # self.logger.experiment.add_image('sample_delta_' + mode, img, global_step=self.current_epoch * len(self.train_dataloader()) + batch_idx)
 
         #     'predicted_image', 'gt_image'
             feat = batch["predicted_image"]
-            exp_feat = batch["gt_image"]
+            exp_feat = batch["image"]
             img = torch.cat((exp_feat, feat), dim=2)[:6]
             img = torchvision.utils.make_grid(img)
 

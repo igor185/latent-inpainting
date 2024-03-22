@@ -6,7 +6,7 @@ num_workers: 16
 
 train:
   indir: /mnt/data/datasets/places_standard_dataset/train
-  out_size: 512
+  out_size: 256
   mask_gen_kwargs:  # probabilities do not need to sum to 1, they are re-normalized in mask generator
     irregular_proba: 1
     irregular_kwargs:

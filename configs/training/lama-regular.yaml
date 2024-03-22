@@ -1,4 +1,4 @@
-run_title: ''
+run_title: 'lama-regular'
 
 training_model:
   kind: default
@@ -24,7 +24,7 @@ losses:
     weights_path: ${env:TORCH_HOME}
 
 defaults:
-  - location: docker
+  - location: places
   - data: abl-04-256-mh-dist
   - generator: pix2pixhd_global_sigmoid
   - discriminator: pix2pixhd_nlayer
