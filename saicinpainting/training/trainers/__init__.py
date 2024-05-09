@@ -29,7 +29,7 @@ def make_training_model(config):
     return cls(config, **kwargs)
 
 
-def load_checkpoint(train_config, path, mask_encoder, map_location='cuda', strict=True):
+def load_checkpoint(train_config, path, mask_encoder=None, map_location='cuda', strict=True):
     model: torch.nn.Module = make_training_model(train_config)
     state = torch.load(path, map_location=map_location)
     if 'state_dict' in state:

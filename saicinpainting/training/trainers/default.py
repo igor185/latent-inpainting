@@ -44,7 +44,7 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
         if self.fake_fakes_proba > 1e-3:
             self.fake_fakes_gen = FakeFakesGenerator(**(fake_fakes_generator_kwargs or {}))
 
-    def forward(self, batch):
+    def forward(self, batch, mode='train'):
         if self.training and self.rescale_size_getter is not None:
             cur_size = self.rescale_size_getter(self.global_step)
             batch['image'] = F.interpolate(batch['image'], size=cur_size, mode='bilinear', align_corners=False)
@@ -53,6 +53,18 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
         if self.training and self.const_area_crop_kwargs is not None:
             batch = make_constant_area_crop_batch(batch, **self.const_area_crop_kwargs)
 
+        use_latent_l2 = self.config.generator.get("use_latent_l2", False)
+        use_control_guidance = self.config.generator.get("use_control_guidance", False)
+
+        encoder = self.generator.model[:5]
+        refiner = self.generator.model[5:-13]
+        decoder = self.generator.model[-13:]
+        # assert if the sum of the mean of the parameters of the encoder is equal to 5.3772
+        # s = sum([i.mean() for i in list(encoder.parameters())]).cpu().float()
+        # if not torch.allclose(s, torch.tensor(5.3772)):
+        #     print(s)
+        # assert torch.allclose(sum([i.mean() for i in list(encoder.parameters())]).cpu().float(), torch.tensor(5.3772))
+        #
         img = batch['image']
         mask = batch['mask']
 
@@ -64,10 +76,51 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
                 masked_img = masked_img + mask * noise[:, :masked_img.shape[1]]
             masked_img = torch.cat([masked_img, noise], dim=1)
 
-        if self.concat_mask:
+        if self.concat_mask and not self.config.generator.get("use_mask_encoder", False):
             masked_img = torch.cat([masked_img, mask], dim=1)
 
-        batch['predicted_image'] = self.generator(masked_img)
+        if encoder[1].ffc.convl2l.in_channels == 4:
+            masked_feat = encoder(masked_img)
+        elif use_control_guidance:
+            ms = []
+            m = mask.float()
+            for l in self.mask_encoder:
+                m = l(m)
+                ms.append(m)
+
+            xs = []
+
+            for i, l in enumerate(encoder):
+                masked_img = l(masked_img)
+                if i == 1:
+                    masked_img = self.zero_conv2(ms[2]) + masked_img[0], masked_img[1]
+                if i == 2:
+                    masked_img = self.zero_conv3(ms[5]) + masked_img[0], masked_img[1]
+                if i == 3:
+                    masked_img = self.zero_conv4(ms[8]) + masked_img[0], masked_img[1]
+                if i == 4:
+                    out = self.zero_conv5(ms[11])
+                    masked_img = out[:, :masked_img[0].shape[1]] + masked_img[0], out[:, masked_img[0].shape[1]:] + masked_img[1]
+                # xs.append(masked_img)
+            masked_feat = masked_img
+
+        elif self.config.generator.get("use_mask_encoder", False):
+            masked_feat = encoder(masked_img)
+            mask_feat = self.mask_encoder(mask.float())
+            masked_feat = (masked_feat[0] + mask_feat[:, :16], masked_feat[1] + mask_feat[:, 16:])
+        else:
+            masked_feat = encoder[2:](self.generator.mask_conv(encoder[0](masked_img)))
+        refined_feat = refiner(masked_feat)
+        # refined_feat = (masked_feat[0] + refined_feat[0],  masked_feat[1] + refined_feat[1])
+        batch["refined_feat"] = refined_feat
+        pred_img = decoder(refined_feat)
+        if use_latent_l2:
+            encoder.eval()
+            batch['gt_feat'] = encoder(img)
+            # batch['gt_feat'] = (a.detach(), b.detach())
+            # batch["img_auto"] = decoder(batch['gt_feat'])
+            # ((img - batch["img_auto"]) ** 2).mean()
+        batch['predicted_image'] = pred_img
         batch['inpainted'] = mask * batch['predicted_image'] + (1 - mask) * batch['image']
 
         if self.fake_fakes_proba > 1e-3:
@@ -98,6 +151,11 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
 
         total_loss = l1_value
         metrics = dict(gen_l1=l1_value)
+
+        if 'gt_feat' in batch:
+            l2_latent = 0.0001 * F.l1_loss(torch.cat(batch['refined_feat'], dim=1), torch.cat(batch['gt_feat'], dim=1))
+            total_loss = total_loss + l2_latent
+            metrics['gen_l2_latent'] = l2_latent
 
         # vgg-based perceptual loss
         if self.config.losses.perceptual.weight > 0:

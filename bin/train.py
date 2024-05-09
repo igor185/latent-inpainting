@@ -11,6 +11,8 @@ os.environ['OPENBLAS_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
 os.environ['VECLIB_MAXIMUM_THREADS'] = '1'
 os.environ['NUMEXPR_NUM_THREADS'] = '1'
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 
 import hydra
 from omegaconf import OmegaConf

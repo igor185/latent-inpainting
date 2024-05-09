@@ -312,11 +312,13 @@ class FFCResNetGenerator(nn.Module):
         assert (n_blocks >= 0)
         super().__init__()
 
-        self.lamb = nn.Parameter(torch.ones(1), requires_grad=False)
+        # self.lamb = nn.Parameter(torch.ones(1), requires_grad=False)
         model = [nn.ReflectionPad2d(3),
                  FFC_BN_ACT(input_nc, ngf, kernel_size=7, padding=0, norm_layer=norm_layer,
                             activation_layer=activation_layer, **init_conv_kwargs)]
-
+        use_mask_conv = kwargs.get('use_mask_conv', True)
+        if use_mask_conv:
+            self.mask_conv = nn.Conv2d(4, 8, kernel_size=(7, 7), stride=(1, 1), bias=False, padding_mode="reflect")
         ### downsample
         for i in range(n_downsampling):
             mult = 2 ** i

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 import pandas as pd
 
@@ -77,3 +78,14 @@ if __name__ == '__main__':
     aparser.add_argument('outpath', type=str, help='Where to put results')
 
     main(aparser.parse_args())
+
+    # python3 bin/evaluate_predicts.py \
+    # $(pwd)/configs/eval2_gpu.yaml \
+    # $(pwd)/places_standard_dataset/evaluation/random_thick_512/ \
+    # $(pwd)/inference/random_thick_512 \
+    # $(pwd)/inference/random_thick_512_metrics.csv
+
+# /home/engineer/Dev/igor/thesis/configs/eval2_gpu.yaml
+# /mnt/data/datasets/places_standard_dataset/evaluation
+# /home/engineer/Dev/igor/thesis/sd/data/inpainting_examples_out
+# /home/engineer/Dev/igor/thesis/sd/data/inpainting_examples_out/random_medium_256_metrics.csv

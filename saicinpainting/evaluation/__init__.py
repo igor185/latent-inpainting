@@ -6,7 +6,7 @@ from saicinpainting.evaluation.evaluator import InpaintingEvaluatorOnline, ssim_
 from saicinpainting.evaluation.losses.base_loss import SSIMScore, LPIPSScore, FIDScore
 
 
-def make_evaluator(kind='default', ssim=False, lpips=False, fid=False, integral_kind=None, **kwargs):
+def make_evaluator(kind='default', ssim=True, lpips=True, fid=True, integral_kind='ssim_fid100_f1', **kwargs):
     logging.info(f'Make evaluator {kind}')
     device = "cuda" if torch.cuda.is_available() else "cpu"
     metrics = {}

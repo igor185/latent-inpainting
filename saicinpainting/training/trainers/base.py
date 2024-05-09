@@ -86,10 +86,10 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         self.config = config
 
         self.generator = make_generator(config, **self.config.generator)
-        self.autoencoder = TAESD()  # self.autoencoder.encoder(images), self.autoencoder.decoder(y_)
+        # self.autoencoder = TAESD()  # self.autoencoder.encoder(images), self.autoencoder.decoder(y_)
         # self.autoencoder = SDWrapper()
-        if self.config.generator.get('mask_encoder', None) is not None:
-            type = self.config.generator.get('mask_encoder', "init")
+        if self.config.generator.get('use_mask_encoder', None) is not None:
+            type = self.config.generator.get('mask_encoder', "sam")
             if type == "init":
                 self.mask_encoder = nn.Sequential(
                     nn.Conv2d(1, 16, 3, stride=2, padding=1),
@@ -110,6 +110,30 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                 )
             elif type == "normed":
                 self.mask_encoder = MaskEncoder(4)
+            elif type == "control":
+                self.mask_encoder = nn.Sequential(
+                    nn.Conv2d(1, 8, kernel_size=1, stride=1, padding=0),
+                    nn.BatchNorm2d(8),
+                    nn.ReLU(),
+                    nn.Conv2d(8, 16, kernel_size=3, stride=2, padding=1),
+                    nn.BatchNorm2d(16),
+                    nn.ReLU(),
+                    nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),
+                    nn.BatchNorm2d(32),
+                    nn.ReLU(),
+                    nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
+                    nn.BatchNorm2d(64),
+                    nn.ReLU(),
+                )
+                self.zero_conv2 = nn.Conv2d(8, 8, kernel_size=1, stride=1, padding=0, bias=False)
+                self.zero_conv3 = nn.Conv2d(16, 16, kernel_size=1, stride=1, padding=0, bias=False)
+                self.zero_conv4 = nn.Conv2d(32, 32, kernel_size=1, stride=1, padding=0, bias=False)
+                self.zero_conv5 = nn.Conv2d(64, 64, kernel_size=1, stride=1, padding=0, bias=False)
+
+                self.zero_conv2.weight.data = torch.zeros_like(self.zero_conv2.weight)
+                self.zero_conv3.weight.data = torch.zeros_like(self.zero_conv3.weight)
+                self.zero_conv4.weight.data = torch.zeros_like(self.zero_conv4.weight)
+                self.zero_conv5.weight.data = torch.zeros_like(self.zero_conv5.weight)
         self.re_embeder = ReEmbeder(4, hidden_dim=32, in_dim=4, out_dim=4)
         # self.unet = UNet(64, 64)
         self.unet = smp.Unet("resnet34", encoder_weights=None, in_channels=4, classes=4)
@@ -166,6 +190,33 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
                 self.loss_resnet_pl = None
 
         self.visualize_each_iters = visualize_each_iters
+
+        if self.config.generator.get("load_autoencoder", '') != "":
+            path = self.config.generator.get("load_autoencoder", '')
+            state = torch.load(path, map_location='cpu')
+            state_dict = {i[16:] if i.startswith('generator.') else i: state[i] for i in state}
+            # remove 1.ffc.convl2l.weight from state_dict
+            if self.generator.model[1].ffc.convl2l.in_channels != 3:
+                state_dict = {k: v for k, v in state_dict.items() if '1.ffc.convl2l.weight' != k}
+
+            self.generator.model.load_state_dict(state_dict, strict=False)
+
+            if self.config.generator.get("freeze_autoencoder", ''):
+                encoder = self.generator.model[:5]
+                refiner = self.generator.model[5:-13]
+                decoder = self.generator.model[-13:]
+                # freeze encoder and decoder
+                for params in encoder.parameters():
+                    params.requires_grad = False
+
+                if encoder[1].ffc.convl2l.in_channels != 3:
+                    for params in self.generator.model[1].ffc.convl2l.parameters():
+                        params.requires_grad = True
+
+                for params in decoder.parameters():
+                    params.requires_grad = False
+
+
         LOGGER.info('BaseInpaintingTrainingModule init done')
 
     def configure_optimizers(self):
@@ -182,10 +233,17 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         # ]
 
         discriminator_params = list(self.discriminator.parameters())
-        return [
-            dict(optimizer=make_optimizer(self.generator.parameters(), **self.config.optimizers.generator)),
-            dict(optimizer=make_optimizer(discriminator_params, **self.config.optimizers.discriminator)),
-        ]
+        if self.config.losses.adversarial.weight != 0:
+            return [
+                dict(optimizer=make_optimizer([*self.generator.parameters(), *self.mask_encoder.parameters()
+                                               *self.zero_conv2.parameters(), *self.zero_conv3.parameters(),
+                                                  *self.zero_conv4.parameters(), *self.zero_conv5.parameters(),
+                                               ], **self.config.optimizers.generator)),
+                dict(optimizer=make_optimizer(discriminator_params, **self.config.optimizers.discriminator)),
+            ]
+        else:
+            return [
+                dict(optimizer=make_optimizer(self.generator.parameters(), **self.config.optimizers.generator))]
 
     def train_dataloader(self):
         kwargs = dict(self.config.data.train)
@@ -227,14 +285,14 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         return self._do_step(batch, batch_idx, mode=mode, extra_val_key=extra_val_key)
 
     def training_step_end(self, batch_parts_outputs):
-        if self.training and self.average_generator \
-                and self.global_step >= self.average_generator_start_step \
-                and self.global_step >= self.last_generator_averaging_step + self.average_generator_period:
-            if self.generator_average is None:
-                self.generator_average = copy.deepcopy(self.generator)
-            else:
-                update_running_average(self.generator_average, self.generator, decay=self.generator_avg_beta)
-            self.last_generator_averaging_step = self.global_step
+        # if self.training and self.average_generator \
+        #         and self.global_step >= self.average_generator_start_step \
+        #         and self.global_step >= self.last_generator_averaging_step + self.average_generator_period:
+        #     if self.generator_average is None:
+        #         self.generator_average = copy.deepcopy(self.generator)
+        #     else:
+        #         update_running_average(self.generator_average, self.generator, decay=self.generator_avg_beta)
+        #     self.last_generator_averaging_step = self.global_step
 
         full_loss = (batch_parts_outputs['loss'].mean()
                      if torch.is_tensor(batch_parts_outputs['loss'])  # loss is not tensor when no discriminator used
@@ -254,15 +312,15 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         # standard validation
         # val_evaluator_states = [s['val_evaluator_state'] for s in outputs if 'val_evaluator_state' in s]
         # val_evaluator_res = self.val_evaluator.evaluation_end(states=val_evaluator_states)
-        # val_evaluator_res_df = pd.DataFrame(val_evaluator_res).stack(1).unstack(0)
+        # val_evaluator_res_df = pd.DataFrame(val_evaluator_states)#.stack(1).unstack(0)
         # val_evaluator_res_df.dropna(axis=1, how='all', inplace=True)
         # LOGGER.info(f'Validation metrics after epoch #{self.current_epoch}, '
         #             f'total {self.global_step} iterations:\n{val_evaluator_res_df}')
-
+        #
         # for k, v in flatten_dict(val_evaluator_res).items():
         #     self.log(f'val_{k}', v)
-
-        # standard visual test
+        #
+        # # standard visual test
         # test_evaluator_states = [s['test_evaluator_state'] for s in outputs
         #                          if 'test_evaluator_state' in s]
         # test_evaluator_res = self.test_evaluator.evaluation_end(states=test_evaluator_states)
@@ -270,7 +328,7 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         # test_evaluator_res_df.dropna(axis=1, how='all', inplace=True)
         # LOGGER.info(f'Test metrics after epoch #{self.current_epoch}, '
         #             f'total {self.global_step} iterations:\n{test_evaluator_res_df}')
-        #
+
         # for k, v in flatten_dict(test_evaluator_res).items():
         #     self.log(f'test_{k}', v)
 
@@ -291,11 +349,28 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         if optimizer_idx == 0:  # step for generator
             set_requires_grad(self.generator, True)
             set_requires_grad(self.discriminator, False)
+            encoder = self.generator.model[:5]
+            decoder = self.generator.model[-13:]
+            # encoder.eval()
+            # decoder.eval()
+            # for param in encoder.parameters():
+            #     if param.requires_grad:
+            #         param.requires_grad = False
+            #         # print("!!!! encoder requires grad")
+            #     else:
+            #         break
+            #
+            # for param in decoder.parameters():
+            #     if param.requires_grad:
+            #         param.requires_grad = False
+            #         # print("!!!!! decoder requires grad")
+            #     else:
+            #         break
         elif optimizer_idx == 1:  # step for discriminator
             set_requires_grad(self.generator, False)
             set_requires_grad(self.discriminator, True)
 
-        batch = self(batch)
+        batch = self(batch, mode=mode)
 
         total_loss = 0
         metrics = {}

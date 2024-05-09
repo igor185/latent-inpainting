@@ -53,6 +53,8 @@ class AutoencoderTrainingModule(BaseInpaintingTrainingModule):
         if self.training and self.const_area_crop_kwargs is not None:
             batch = make_constant_area_crop_batch(batch, **self.const_area_crop_kwargs)
 
+        print(self.config.generator.get("use_latent_l2"))
+
         img = batch['image']
         mask = batch['mask']
 
