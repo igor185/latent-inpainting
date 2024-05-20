@@ -1,4 +1,5 @@
 import abc
+import os
 from typing import Tuple, List
 
 import torch
@@ -69,6 +70,7 @@ def deconv_factory(kind, ngf, mult, norm_layer, activation, max_features):
         return [nn.ConvTranspose2d(min(max_features, ngf * mult), 
                     min(max_features, int(ngf * mult / 2)), 
                     kernel_size=3, stride=2, padding=1, output_padding=1),
+
                     norm_layer(min(max_features, int(ngf * mult / 2))), activation]
     elif kind == 'bilinear':
         return [nn.Upsample(scale_factor=2, mode='bilinear'),

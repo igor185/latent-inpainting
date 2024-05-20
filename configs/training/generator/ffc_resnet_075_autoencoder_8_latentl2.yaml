@@ -9,7 +9,7 @@ n_blocks: 9
 add_out_act: sigmoid
 load_autoencoder: /home/engineer/Dev/igor/thesis/own/output_auto_lama_4(another_mask_encoder)/model.pth
 freeze_autoencoder: true
-use_latent_l2: false
+use_latent_l2: true
 use_control_guidance: true
 use_mask_encoder: true
 mask_encoder: control

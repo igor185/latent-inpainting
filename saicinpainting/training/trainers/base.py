@@ -233,17 +233,21 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         # ]
 
         discriminator_params = list(self.discriminator.parameters())
-        if self.config.losses.adversarial.weight != 0:
-            return [
-                dict(optimizer=make_optimizer([*self.generator.parameters(), *self.mask_encoder.parameters()
-                                               *self.zero_conv2.parameters(), *self.zero_conv3.parameters(),
-                                                  *self.zero_conv4.parameters(), *self.zero_conv5.parameters(),
-                                               ], **self.config.optimizers.generator)),
-                dict(optimizer=make_optimizer(discriminator_params, **self.config.optimizers.discriminator)),
-            ]
+        if 'zero_conv2' in dir(self):
+            gen_params = [*list(self.generator.parameters()), *list(self.mask_encoder.parameters()),
+                          *list(self.zero_conv2.parameters()), *list(self.zero_conv3.parameters()),
+                          *list(self.zero_conv4.parameters()), *list(self.zero_conv5.parameters())]
         else:
-            return [
-                dict(optimizer=make_optimizer(self.generator.parameters(), **self.config.optimizers.generator))]
+            gen_params = [*list(self.generator.parameters()), *list(self.mask_encoder.parameters())]
+
+        # if self.config.losses.adversarial.weight != 0:
+        return [
+            dict(optimizer=make_optimizer(gen_params, **self.config.optimizers.generator)),
+            # dict(optimizer=make_optimizer(discriminator_params, **self.config.optimizers.discriminator)),
+        ]
+        # else:
+        #     return [
+        #         dict(optimizer=make_optimizer(self.generator.parameters(), **self.config.optimizers.generator))]
 
     def train_dataloader(self):
         kwargs = dict(self.config.data.train)
@@ -351,21 +355,21 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
             set_requires_grad(self.discriminator, False)
             encoder = self.generator.model[:5]
             decoder = self.generator.model[-13:]
-            # encoder.eval()
-            # decoder.eval()
-            # for param in encoder.parameters():
-            #     if param.requires_grad:
-            #         param.requires_grad = False
-            #         # print("!!!! encoder requires grad")
-            #     else:
-            #         break
-            #
-            # for param in decoder.parameters():
-            #     if param.requires_grad:
-            #         param.requires_grad = False
-            #         # print("!!!!! decoder requires grad")
-            #     else:
-            #         break
+            encoder.eval()
+            decoder.eval()
+            for param in encoder.parameters():
+                if param.requires_grad:
+                    param.requires_grad = False
+                    # print("!!!! encoder requires grad")
+                else:
+                    break
+
+            for param in decoder.parameters():
+                if param.requires_grad:
+                    param.requires_grad = False
+                    # print("!!!!! decoder requires grad")
+                else:
+                    break
         elif optimizer_idx == 1:  # step for discriminator
             set_requires_grad(self.generator, False)
             set_requires_grad(self.discriminator, True)

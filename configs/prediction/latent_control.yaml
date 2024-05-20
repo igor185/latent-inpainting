@@ -1,0 +1,28 @@
+indir: /home/engineer/Dev/igor/thesis/own/data  # to be overriden in CLI
+outdir: /home/engineer/Dev/igor/thesis/own/output  # to be overriden in CLI
+
+model:
+#  path: /mnt/code/logs/lama/experiments/engineer_2024-05-09_22-18-47_train_lama-fourier-latent-l2_lama-fourier-l2 #
+  path: /mnt/code/logs/lama/experiments/engineer_2024-05-09_14-13-34_train_lama-fourier-latent-l2_lama-fourier-mask_encoder_latent_l2_control #
+#  path: /mnt/code/logs/lama/experiments/engineer_2024-05-08_23-14-26_train_lama-fourier-latent-l2_lama-fourier-mask_encoder_pixel_l2_control #
+#  path: /mnt/code/logs/lama/experiments/engineer_2024-05-10_15-44-12_train_lama-fourier-latent-l2_lama-fourier-latent-l2 #
+#  path: /home/engineer/Dev/igor/lama/LaMa_models/lama-places/lama-fourier  # to be overriden in CLI
+  checkpoint: best.ckpt
+
+dataset:
+  kind: default
+  img_suffix: .png
+  pad_out_to_modulo: 8
+
+device: cuda
+out_key: inpainted
+
+refine: False # refiner will only run if this is True
+refiner:
+  gpu_ids: 0 # the GPU ids of the machine to use. If only single GPU, use: "0,"
+  modulo: ${dataset.pad_out_to_modulo}
+  n_iters: 15 # number of iterations of refinement for each scale
+  lr: 0.002 # learning rate
+  min_side: 512 # all sides of image on all scales should be >= min_side / sqrt(2)
+  max_scales: 3 # max number of downscaling scales for the image-mask pyramid
+  px_budget: 1800000 # pixels budget. Any image will be resized to satisfy height*width <= px_budget

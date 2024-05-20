@@ -44,6 +44,10 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
         if self.fake_fakes_proba > 1e-3:
             self.fake_fakes_gen = FakeFakesGenerator(**(fake_fakes_generator_kwargs or {}))
 
+        # set seed
+        torch.manual_seed(42)
+        self.x = torch.rand(1, 3, 256, 256)
+
     def forward(self, batch, mode='train'):
         if self.training and self.rescale_size_getter is not None:
             cur_size = self.rescale_size_getter(self.global_step)
@@ -60,10 +64,40 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
         refiner = self.generator.model[5:-13]
         decoder = self.generator.model[-13:]
         # assert if the sum of the mean of the parameters of the encoder is equal to 5.3772
+
+        # x= self.x.to(encoder[1].ffc.convl2l.weight.device)
+        # for l in encoder:
+        #     x = l(x)
+        #     print(x.mean() if type(x) == torch.Tensor else x[0].mean())
+        # tensor(0.5007, device='cuda:0')
+        # tensor(0.6494, device='cuda:0')
+        # tensor(0.3892, device='cuda:0')
+        # tensor(0.5692, device='cuda:0')
+        # tensor(0.4528, device='cuda:0')
+        # print("----")
+        # for l in decoder:
+        #     x = l(x)
+        #     print(x.mean() if type(x) == torch.Tensor else x[0].mean())
+
+        # tensor(0.5060, device='cuda:0')
+        # tensor(-0.1422, device='cuda:0')
+        # tensor(0.0211, device='cuda:0')
+        # tensor(0.4433, device='cuda:0')
+        # tensor(-0.0154, device='cuda:0')
+        # tensor(0.0498, device='cuda:0')
+        # tensor(0.4458, device='cuda:0')
+        # tensor(0.0759, device='cuda:0')
+        # tensor(0.0143, device='cuda:0')
+        # tensor(0.3823, device='cuda:0')
+        # tensor(0.3802, device='cuda:0')
+        # tensor(-0.2725, device='cuda:0')
+        # tensor(0.4388, device='cuda:0')
         # s = sum([i.mean() for i in list(encoder.parameters())]).cpu().float()
-        # if not torch.allclose(s, torch.tensor(5.3772)):
-        #     print(s)
-        # assert torch.allclose(sum([i.mean() for i in list(encoder.parameters())]).cpu().float(), torch.tensor(5.3772))
+        # sd = sum([i.mean() for i in list(decoder.parameters())]).cpu().float()
+        # if not torch.allclose(s, torch.tensor(5.3772)) and not torch.allclose(sd, torch.tensor(2.8756)):
+        #     print(s, sd)
+        # assert torch.allclose(s, torch.tensor(5.3772)), f"Sum of the mean of the parameters of the encoder is {s}"
+        # assert torch.allclose(sd, torch.tensor(2.875640392303467)), f"Sum of the mean of the parameters of the decoder is {sd}"
         #
         img = batch['image']
         mask = batch['mask']
@@ -87,8 +121,6 @@ class DefaultInpaintingTrainingModule(BaseInpaintingTrainingModule):
             for l in self.mask_encoder:
                 m = l(m)
                 ms.append(m)
-
-            xs = []
 
             for i, l in enumerate(encoder):
                 masked_img = l(masked_img)

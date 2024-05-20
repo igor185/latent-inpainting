@@ -1,4 +1,6 @@
 import logging
+import os
+
 import math
 from typing import Dict
 
@@ -12,7 +14,7 @@ from saicinpainting.evaluation.utils import move_to_device
 
 LOGGER = logging.getLogger(__name__)
 
-
+# os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 class InpaintingEvaluator():
     def __init__(self, dataset, scores, area_grouping=True, bins=10, batch_size=32, device='cuda',
                  integral_func=None, integral_title=None, clamp_image_range=None):
